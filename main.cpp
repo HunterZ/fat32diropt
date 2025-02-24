@@ -126,53 +126,53 @@ std::string readString(ByteStream& stream, std::size_t len)
 struct DiskInfo
 {
   // DOS 2.0 boot sector
-  uint32_t    jump{};
-  std::string oemName{};
+  std::uint32_t jump{};
+  std::string   oemName{};
   // DOS 2.0 BIOS parameter block
-  uint16_t    bytesPerSector{};
-  ByteType    sectorsPerCluster{};
-  uint16_t    reservedSectors{};
-  ByteType    fatCount{};
-  uint16_t    oldRootDirMax{};
-  uint16_t    oldTotalSectors{};
-  ByteType    mediaDescriptor{};
-  uint16_t    oldSectorsPerFat{};
+  std::uint16_t bytesPerSector{};
+  ByteType      sectorsPerCluster{};
+  std::uint16_t reservedSectors{};
+  ByteType      fatCount{};
+  std::uint16_t oldRootDirMax{};
+  std::uint16_t oldTotalSectors{};
+  ByteType      mediaDescriptor{};
+  std::uint16_t oldSectorsPerFat{};
   // DOS 3.31 BIOS parameter block
-  uint16_t    sectorsPerTrack{};
-  uint16_t    headCount{};
-  uint32_t    hiddenSectorCount{};
-  uint32_t    totalSectors{};
+  std::uint16_t sectorsPerTrack{};
+  std::uint16_t headCount{};
+  std::uint32_t hiddenSectorCount{};
+  std::uint32_t totalSectors{};
   // FAT32 extended BIOS parameter block
-  uint32_t    sectorsPerFat{};
-  uint16_t    driveFlags{};
-  ByteType    versionLo{};
-  ByteType    versionHi{};
-  uint32_t    rootDirStartCluster{};
-  uint16_t    fsInfoSector{};
-  uint16_t    backupBootSector{};
-  uint32_t    reserved1{};
-  uint32_t    reserved2{};
-  uint32_t    reserved3{};
-  ByteType    driveNumber{};
-  ByteType    misc1{};
-  ByteType    extBootSig{};
-  uint32_t    volumeId{};
-  std::string volumeLabel{};
-  std::string fsType{};
+  std::uint32_t sectorsPerFat{};
+  std::uint16_t driveFlags{};
+  ByteType      versionLo{};
+  ByteType      versionHi{};
+  std::uint32_t rootDirStartCluster{};
+  std::uint16_t fsInfoSector{};
+  std::uint16_t backupBootSector{};
+  std::uint32_t reserved1{};
+  std::uint32_t reserved2{};
+  std::uint32_t reserved3{};
+  ByteType      driveNumber{};
+  ByteType      misc1{};
+  ByteType      extBootSig{};
+  std::uint32_t volumeId{};
+  std::string   volumeLabel{};
+  std::string   fsType{};
   // FS Information Sector
-  uint32_t    fsisSignature1{};
+  std::uint32_t fsisSignature1{};
   //  480 reserved bytes not read
-  uint32_t    fsisSignature2{};
-  uint32_t    fsisFreeClusters{};
-  uint32_t    fsisRecentCluster{};
+  std::uint32_t fsisSignature2{};
+  std::uint32_t fsisFreeClusters{};
+  std::uint32_t fsisRecentCluster{};
   //  12 reserved bytes not read
-  uint32_t    fsisSignature3{};
+  std::uint32_t fsisSignature3{};
   // DERIVED VALUES
-  uint32_t    bytesPerCluster{};
-  uint32_t    totalClusters{};
-  uint64_t    totalBytes{};
-  uint64_t    cluster2StartByte{};
-  std::size_t dirEntriesPerCluster{};
+  std::uint32_t bytesPerCluster{};
+  std::uint32_t totalClusters{};
+  std::size_t   totalBytes{};
+  std::size_t   cluster2StartByte{};
+  std::size_t   dirEntriesPerCluster{};
 
   // copy the given source cluster's data to the given destination cluster
   // does nothing if cluster indices are out of range
@@ -264,9 +264,12 @@ struct DiskInfo
     // DERIVED VALUES
     bytesPerCluster = bytesPerSector * toNum(sectorsPerCluster);
     totalClusters = totalSectors / toNum(sectorsPerCluster);
-    totalBytes = totalSectors * bytesPerSector;
-    cluster2StartByte =
-      (reservedSectors + (fatCount * sectorsPerFat)) * bytesPerSector;
+    totalBytes = static_cast<std::size_t>(totalSectors) * bytesPerSector;
+    cluster2StartByte = 
+      (
+        static_cast<std::size_t>(reservedSectors) + 
+        (static_cast<std::size_t>(fatCount) * sectorsPerFat)
+      ) * bytesPerSector;
     dirEntriesPerCluster = bytesPerCluster / 32;
   }
 
@@ -379,18 +382,18 @@ struct FileAllocationTable32
 
   // metadata
   //  byte index of table start on disk
-  uint64_t startByte{};
+  std::uint64_t startByte{};
 
   // actual table contents
   std::vector<std::uint32_t> entries{};
 
-  uint32_t GetFATID() const
+  std::uint32_t GetFATID() const
   {
     assert(entries.size() > 0);
     return entries.at(0);
   }
 
-  uint32_t GetFlags() const
+  std::uint32_t GetFlags() const
   {
     assert(entries.size() > 1);
     return entries.at(1);
@@ -400,8 +403,8 @@ struct FileAllocationTable32
   //  the FAT at the given byte location with the given length in bytes
   void Get(
     ByteStream& stream,
-    const uint64_t byteLocation,
-    const uint32_t byteLength)
+    const std::uint64_t byteLocation,
+    const std::uint32_t byteLength)
   {
     // cache table start location
     startByte = byteLocation;
@@ -410,11 +413,11 @@ struct FileAllocationTable32
     // drop existing table (if any)
     entries.clear();
     // each entry is 32 bits (4 bytes) in size
-    const uint32_t numEntries{byteLength / 4};
+    const std::uint32_t numEntries{byteLength / 4};
     // allocate (but don't initialize) enough space for the entire table
     entries.reserve(numEntries);
-    uint32_t temp{};
-    for (uint32_t i{0}; i < numEntries; ++i)
+    std::uint32_t temp{};
+    for (std::uint32_t i{0}; i < numEntries; ++i)
     {
       // read into temp var, then append to table
       // this should be fairly efficient, as the table RAM is already allocated
@@ -425,8 +428,8 @@ struct FileAllocationTable32
 
   FileAllocationTable32(
     ByteStream& stream,
-    const uint64_t byteLocation,
-    const uint32_t byteLength)
+    const std::uint64_t byteLocation,
+    const std::uint32_t byteLength)
   {
     Get(stream, byteLocation, byteLength);
   }
@@ -744,11 +747,6 @@ struct DirectoryEntry
     sequenceData = IsLongFilenameData() ? shortName[0] : 0;
   }
 
-  explicit DirectoryEntry(ByteStream& stream)
-  {
-    Get(stream);
-  }
-
   std::string GetFilename() const
   {
     if (IsLongFilenameData() || IsEnd()) return {};
@@ -783,85 +781,101 @@ struct DirectoryEntry
     return (static_cast<std::uint32_t>(startClusterHi) << 16) | startClusterLo;
   }
 
-  // return whether entry is a device
+  // IsXYZ() NOTES:
+  // - precedence is: LFN > shortName[0] > attributes
+  // - some LFN-related stuff marked "SEQ" also checks sequence data
+
+  // (ATTR) return whether entry is a device
   bool IsDevice() const
   {
-    return !IsLongFilenameData() && (attributes & ATTR::DEVICE);
+    return !IsLongFilenameData()        // LFN
+        && !IsEnd()                     // SN0
+        && !IsErased()                  // SN0
+        && (attributes & ATTR::DEVICE); // ATTR
   }
 
-  // return whether entry is a directory (subdirectory or dot entry)
+  // (ATTR) return whether entry is a directory (subdirectory or dot entry)
   bool IsDirectory() const
   {
-    return !IsLongFilenameData()
-        && !IsEnd()
-        && !IsErased()
-        && (attributes & ATTR::SUBDIR);
+    return !IsLongFilenameData()        // LFN
+        && !IsEnd()                     // SN0
+        && !IsErased()                  // SN0
+        && (attributes & ATTR::SUBDIR); // ATTR
   }
 
-  // return whether entry is "." or ".." directory
+  // (ATTR) return whether entry is "." or ".." directory
   bool IsDotEntry() const
   {
-    return IsDirectory()
-        && (DIR::DOTS == static_cast<ByteType>(shortName[0]));
+    return !IsLongFilenameData()                              // LFN
+        && (DIR::DOTS == static_cast<ByteType>(shortName[0])) // SN0
+        && (attributes & ATTR::SUBDIR);                       // ATTR
   }
 
-  // return whether entry is an end-of-directory-listing marker
+  // (SN0) return whether entry is an end-of-directory-listing marker
   bool IsEnd() const
   {
-    return !IsLongFilenameData()
-        && (DIR::AEND == static_cast<ByteType>(shortName[0]));
+    return !IsLongFilenameData()                                // LFN
+        && (DIR::AEND == static_cast<ByteType>(shortName[0]));  // SN0
   }
 
-  // return whether entry is an end-of-long-filename marker
+  // (SEQ) return whether entry is an end-of-long-filename marker
   bool IsEndLFN() const
   {
-    return IsLongFilenameData() && (sequenceData & LFN::END);
+    return IsLongFilenameData()       // LFN
+        && !IsErasedLFN()             // LFN
+        && (sequenceData & LFN::END); // SEQ
   }
 
-  // return whether entry is an empty/erased slot
+  // (SN0) return whether entry is an empty/erased slot
   bool IsErased() const
   {
-    return !IsLongFilenameData()
-        && (DIR::ADEL == static_cast<ByteType>(shortName[0]));
+    return !IsLongFilenameData()                                // LFN
+        && (DIR::ADEL == static_cast<ByteType>(shortName[0]));  // SN0
   }
 
-  // return whether entry is an erased long filename slot
+  // (SEQ) return whether entry is an erased long filename slot
   bool IsErasedLFN() const
   {
-    return IsLongFilenameData() && (LFN::DEL == sequenceData);
+    return IsLongFilenameData()         // LFN
+        && (LFN::DEL == sequenceData);  // SEQ
   }
 
-  // return whether entry is a regular file
+  // (ATTR) return whether entry is a regular file
   bool IsFile() const
   {
-    return !IsLongFilenameData()
-        && !IsEnd()
-        && !IsErased()
-        && !IsDevice()
-        && !IsDirectory()
-        && !IsVolumeLabel()
+    return !IsLongFilenameData()  // LFN
+        && !IsEnd()               // SN0
+        && !IsErased()            // SN0
+        && !IsDevice()            // ATTR
+        && !IsDirectory()         // ATTR
+        && !IsDotEntry()          // ATTR
+        && !IsVolumeLabel()       // ATTR
     ;
   }
 
-  // return whether entry is LFN metadata
+  // (LFN) return whether entry is LFN metadata
   // this is based on a special combination of attributes, and should be checked
   //  before shortName[0] based special bytes or other attributes when
   //  attempting to determine an entry's nature
   bool IsLongFilenameData() const
   {
-    return ATTR::VFATLN == attributes;
+    return ATTR::VFATLN == attributes;  // LFN
   }
 
-  // return whether entry is a subdirectory (non-dot directory)
+  // (ATTR) return whether entry is a subdirectory (non-dot directory)
   bool IsSubdirectory() const
   {
-    return IsDirectory() && !IsDotEntry();
+    return IsDirectory()  // ATTR
+        && !IsDotEntry(); // ATTR
   }
 
-  // return whether entry is a volume label
+  // (ATTR) return whether entry is a volume label
   bool IsVolumeLabel() const
   {
-    return !IsLongFilenameData() && (attributes & ATTR::VLABEL);
+    return !IsLongFilenameData()        // LFN
+        && !IsEnd()                     // SN0
+        && !IsErased()                  // SN0
+        && (attributes & ATTR::VLABEL); // ATTR
   }
 
   void Print(const FileAllocationTable32& fat) const
@@ -957,17 +971,28 @@ struct DirectoryEntry
     ;
     return s.str();
   }
+
+  DirectoryEntry() = delete;
+  DirectoryEntry(const DirectoryEntry&) = delete;
+  DirectoryEntry& operator=(const DirectoryEntry&) = delete;
+
+  explicit DirectoryEntry(ByteStream& stream)
+  {
+    Get(stream);
+  }
+
+  // this is required in order to make std::vector::emplace_back() work
+  DirectoryEntry(DirectoryEntry&& rhs) = default;
 };
 
 struct Directory : public std::enable_shared_from_this<Directory>
 {
   // parent directory, or nullptr for root directory
   std::shared_ptr<Directory> parent{};
-  using EntryData = std::pair<DirectoryEntry, std::shared_ptr<Directory>>;
-  using Entries = std::vector<EntryData>;
   // contained LFN/file/subdirectory metadata entries, plus optional
   //  corresponding Directory object
-  Entries entries{};
+  std::vector<DirectoryEntry> entryData{};
+  std::vector<std::shared_ptr<Directory>> entryDir{};
 
   // read all data for the directory stored in the given FAT cluster chain
   // optionally recurse to follow the entire directory tree from the given
@@ -980,7 +1005,8 @@ struct Directory : public std::enable_shared_from_this<Directory>
     const bool recurse = false)
   {
     const auto maxEntriesPerCluster{diskInfo.bytesPerCluster / 32};
-    entries.clear();
+    entryData.clear();
+    entryDir.clear();
 
     // walk cluster chain, in case directory somehow spans multiple clusters
     bool abort{false};
@@ -999,9 +1025,10 @@ struct Directory : public std::enable_shared_from_this<Directory>
       for (std::size_t i{0}; i < maxEntriesPerCluster; ++i)
       {
         // decode current stream position into a new directory entry object
-        const auto& [entryData, dirPtr]{entries.emplace_back(stream, nullptr)};
+        const auto& myEntryData{entryData.emplace_back(stream)};
+        entryDir.emplace_back(nullptr);
         // stop the show if this is an end-of-directory record
-        if (entryData.IsEnd())
+        if (myEntryData.IsEnd())
         {
           abort = true;
           break;
@@ -1013,17 +1040,21 @@ struct Directory : public std::enable_shared_from_this<Directory>
     if (!recurse) return;
 
     // do a breadth-first walk of all subdirectories for disk read efficiency
-    for (auto& [entryData, dirPtr] : entries)
+    for (std::size_t i{0}; i < entryData.size(); ++i)
     {
-      // skip non-directories, plus . and ..
-      if (!entryData.IsDirectory() || entryData.IsDotEntry()) continue;
+      const auto& curEntry{entryData.at(i)};
+      auto& curDir{entryDir.at(i)};
+      // abort if end record found
+      if (curEntry.IsEnd()) break;
+      // skip anything that's not a proper subdirectory entry
+      if (!curEntry.IsSubdirectory()) continue;
       // recursively call this method for this subdirectory
-      dirPtr = std::make_shared<Directory>(shared_from_this());
-      dirPtr->Get(
+      curDir = std::make_shared<Directory>(shared_from_this());
+      curDir->Get(
         stream,
         diskInfo,
         fat,
-        entryData.GetStartCluster(),
+        curEntry.GetStartCluster(),
         recurse);
     }
   }
@@ -1052,8 +1083,11 @@ struct Directory : public std::enable_shared_from_this<Directory>
     const std::size_t entryIndex,
     const std::uint32_t newStartCluster)
   {
+    // std::cout << "ChangeStartClusterAt(): BEFORE: ";
+    // entryData.at(entryIndex).Print(fat);
+
     // sanity checks
-    if (entryIndex >= entries.size())
+    if (entryIndex >= entryData.size())
     {
       std::cout << "ERROR: Directory::ChangeStartCluster(): Index out of range\n";
       return false;
@@ -1136,9 +1170,12 @@ struct Directory : public std::enable_shared_from_this<Directory>
     stream.write((const char*)(bufLo.data()), 2);
 
     // update in-memory entry
-    auto& entryData{entries.at(entryIndex).first};
-    entryData.startClusterHi = newStartCluster >> 16;
-    entryData.startClusterLo = newStartCluster & 0xFFFF;
+    auto& data{entryData.at(entryIndex)};
+    data.startClusterHi = newStartCluster >> 16;
+    data.startClusterLo = newStartCluster & 0xFFFF;
+
+    // std::cout << "ChangeStartClusterAt(): AFTER: ";
+    // entryData.at(entryIndex).Print(fat);
 
     return true;
   }
@@ -1148,12 +1185,17 @@ struct Directory : public std::enable_shared_from_this<Directory>
   // returns Directory::npos if no match exists
   std::size_t Find(const std::uint32_t atCluster) const
   {
-    for (std::size_t i{0}; i < entries.size(); ++i)
+    for (std::size_t i{0}; i < entryData.size(); ++i)
     {
-      if (atCluster == entries.at(i).first.GetStartCluster())
-      {
-        return i;
-      }
+      const auto& data{entryData.at(i)};
+      // skip LFN data entries
+      if (data.IsLongFilenameData()) continue;
+      // abort if end record reached
+      if (data.IsEnd()) break;
+      // skip erased data entries
+      if (data.IsErased()) continue;
+      // return match
+      if (atCluster == data.GetStartCluster()) return i;
     }
     return npos;
   }
@@ -1161,11 +1203,12 @@ struct Directory : public std::enable_shared_from_this<Directory>
   // get own start cluster as reported by "." entry, or 0 if not found
   std::uint32_t GetStartCluster() const
   {
-    for (const auto& [entryData, entryDirPtr] : entries)
+    for (const auto& data : entryData)
     {
-      if (entryData.IsDotEntry() && "." == entryData.GetFilename())
+      if (data.IsEnd()) break;
+      if (data.IsDotEntry() && "." == data.GetFilename())
       {
-        return entryData.GetStartCluster();
+        return data.GetStartCluster();
       }
     }
     return 0;
@@ -1173,10 +1216,10 @@ struct Directory : public std::enable_shared_from_this<Directory>
 
   void Print(const FileAllocationTable32& fat) const
   {
-    for (const auto& [dirData, dirPtr] : entries)
+    for (const auto& data : entryData)
     {
       std::cout << '\t';
-      dirData.Print(fat);
+      data.Print(fat);
     }
   }
 };
@@ -1232,19 +1275,23 @@ struct Rfat
     // record the RFAT chain for the directory itself
     RecordChain(fat, dir->parent, dirStartCluster);
     // process all directory entries, recursing into directories
-    for (const auto& [dirData, dirPtr] : dir->entries)
+    for (std::size_t i{0}; i < dir->entryData.size(); ++i)
     {
+      const auto& data{dir->entryData.at(i)};
+      const auto subDir{dir->entryDir.at(i)};
+      // stop if end record reached
+      if (data.IsEnd()) break;
       // ignore if not a regular file or subdirectory
-      const bool isDir{dirData.IsDirectory() && !dirData.IsDotEntry()};
-      if (!isDir && !dirData.IsFile()) continue;
+      const bool isSubdir{data.IsSubdirectory()};
+      if (!isSubdir && !data.IsFile()) continue;
       // get start cluster
-      const auto startCluster{dirData.GetStartCluster()};
-      if (isDir)
+      const auto startCluster{data.GetStartCluster()};
+      if (isSubdir)
       {
         // process subdirectory via recursion
-        assert(dirPtr);
+        assert(subDir);
         // std::cout << "Recording RFAT chain for subdirectory '" << dirData.GetFilename() << "': ";
-        Process(fat, dirPtr, startCluster);
+        Process(fat, subDir, startCluster);
       }
       else
       {
@@ -1355,6 +1402,7 @@ bool updateDirEntry(
   std::shared_ptr<Directory> meDir
 )
 {
+  // std::cout << "***** Changing start cluster in parent data from " << std::dec << (parentDir ? parentDir->entryData.at(entryIndex).GetStartCluster() : static_cast<std::uint32_t>(-1)) << " to " << cluster << '\n';
   // update entry in parent directory to point at new start cluster
   if (!parentDir || !parentDir->ChangeStartClusterAt(
     stream, diskInfo, fat, entryIndex, cluster))
@@ -1369,14 +1417,17 @@ bool updateDirEntry(
   }
 
   // update directory entries affected by subdirectory start cluster move
-  auto& subdirEntries{meDir->entries};
-  for (std::size_t i{0}; i < subdirEntries.size(); ++i)
-  // for (auto& [subdirEntry, subdirPtr] : subdirEntries)
+  for (std::size_t i{0}; i < meDir->entryData.size(); ++i)
   {
-    const auto& [subdirEntry, subdirPtr]{subdirEntries.at(i)};
+    const auto& subdirEntry{meDir->entryData.at(i)};
+    // stop if end record reached
+    if (subdirEntry.IsEnd()) break;
+    // ignore non-directory records
+    if (!subdirEntry.IsDirectory()) continue;
     // update own "." entry to point at destCluster
     if ("." == subdirEntry.GetFilename())
     {
+      // std::cout << "***** Changing '.' start cluster from " << std::dec << subdirEntry.GetStartCluster() << " to " << cluster << '\n';
       if (!meDir->ChangeStartClusterAt(stream, diskInfo, fat, i, cluster))
       {
         return false;
@@ -1384,13 +1435,14 @@ bool updateDirEntry(
       continue;
     }
 
-    // only care about updating subdirectories
+    // only care about updating proper subdirectories from here onwards
     if (!subdirEntry.IsSubdirectory())
     {
       continue;
     }
 
     // also need corresponding Directory object
+    auto subdirPtr{meDir->entryDir.at(i)};
     if (!subdirPtr)
     {
       std::cout << "WARNING: Subdirectory '" << subdirEntry.GetFilename() << "' has null Directory pointer\n";
@@ -1398,15 +1450,25 @@ bool updateDirEntry(
     }
 
     // update subdirectory's ".." entry to point at destCluster
-    for (std::size_t j{0}; j < subdirPtr->entries.size(); ++j)
+    for (std::size_t j{0}; j < subdirPtr->entryData.size(); ++j)
     {
-      const auto& [ssdirEntry, ssdirPtr]{subdirPtr->entries.at(j)};
+      const auto& ssdirEntry{subdirPtr->entryData.at(j)};
+      // stop if end record found
+      if (ssdirEntry.IsEnd())
+      {
+        std::cout << "WARNING: Subdirectory '" << ssdirEntry.GetFilename() << "' of subdirectory '" << subdirEntry.GetFilename() << "' has no '..' entry\n";
+      }
+      // ignore non-directory entries
+      if (!ssdirEntry.IsDirectory()) continue;
+      // ignore non-".." entries
       if (".." != ssdirEntry.GetFilename()) continue;
+      // std::cout << "***** Changing '..' start cluster from " << std::dec << ssdirEntry.GetStartCluster() << " to " << cluster << '\n';
       if (!subdirPtr->ChangeStartClusterAt(
         stream, diskInfo, fat, j, cluster))
       {
         return false;
       }
+      // optimization: there should only be one ".." entry, so break here
       break;
     }
   }
@@ -1477,7 +1539,7 @@ bool moveCluster(
     return false;
   }
 
-  // check RFAT to see who is using srcCluster
+  // query RFAT for containing directory and start cluster of srcCluster's FAT chain
   const auto [srcOwnerDir, srcStartCluster]{rfat.GetFileInfo(srcCluster)};
   if (!srcOwnerDir)
   {
@@ -1489,54 +1551,118 @@ bool moveCluster(
   // std::cout << "\t\tSource cluster " << std::dec << srcCluster << " belongs to chain starting with cluster " << srcStartCluster << '\n';
 
   // search the containing dir for using file's entry
-  auto srcEntryIndex{srcOwnerDir->Find(srcStartCluster)};
+  const auto srcEntryIndex{srcOwnerDir->Find(srcStartCluster)};
   if (Directory::npos == srcEntryIndex)
   {
     std::cout << "ERROR: Containing directory can't locate file spanning source cluster " << std::dec << srcCluster << " with possible start cluster " << srcStartCluster << '\n';
     return false;
   }
-  const auto& [srcEntry, srcDir]{srcOwnerDir->entries.at(srcEntryIndex)};
-
+  const auto& srcEntry{srcOwnerDir->entryData.at(srcEntryIndex)};
   // get type of file using srcCluster
   const bool isFile{srcEntry.IsFile()};
   const bool isSubdir{srcEntry.IsSubdirectory()};
   if (!isFile && !isSubdir)
   {
     std::cout << "ERROR: Source cluster " << std::dec << srcCluster << " is in use by something other than a file or directory\n";
+    std::cout << "       Listing: ";
+    srcEntry.Print(fat0);
+    std::cout << "       filename='" << srcEntry.GetFilename() 
+              << "', IsDevice=" << std::dec << srcEntry.IsDevice() 
+              << ", IsDirectory=" << srcEntry.IsDirectory() 
+              << ", IsDotEntry=" << srcEntry.IsDotEntry()
+              << ", IsEnd=" << srcEntry.IsEnd()
+              << ", IsEndLFN=" << srcEntry.IsEndLFN()
+              << ", IsErased=" << srcEntry.IsErased()
+              << ", IsErasedLFN=" << srcEntry.IsErasedLFN()
+              << ", IsFile=" << srcEntry.IsFile()
+              << ", IsLongFilenameData=" << srcEntry.IsLongFilenameData()
+              << ", IsSubdirectory=" << srcEntry.IsSubdirectory()
+              << ", IsVolumeLabel=" << srcEntry.IsVolumeLabel()
+              << '\n';
     return false;
   }
+  const auto& srcDir{srcOwnerDir->entryDir.at(srcEntryIndex)};
   if (isSubdir && !srcDir)
   {
     std::cout << "ERROR: Directory spanning source cluster " << srcCluster << " has null Directory pointer\n";
     return false;
   }
 
-  // get FAT chain info for srcCluster
+  // get (R)FAT chain info for srcCluster
+  // ...and do a ton of sanity checking to ensure everything is in a good state
+  //  actual FAT data for srcCluster
   const auto srcFatData{fat0.entries.at(srcCluster)};
+  //  actual RFAT data for srcCluster
   const auto srcRfatData{rfat.entries.at(srcCluster)};
+  //  whether srcCluster is the start of a FAT chain
   const bool isChainStart{srcCluster == srcStartCluster};
+  //  sanity check that RFAT data is appropriate
+  if (isChainStart && !std::holds_alternative<std::shared_ptr<Directory>>(srcRfatData))
+  {
+    std::cout << "ERROR: Source cluster " << std::dec << srcCluster << " is the start of its FAT chain, but RFAT does not hold a directory pointer for it\n";
+    return false;
+  }
+  if (!isChainStart && !std::holds_alternative<std::uint32_t>(srcRfatData))
+  {
+    std::cout << "ERROR: Source cluster " << std::dec << srcCluster << " is not the start of its FAT chain, but RFAT does not hold cluster data for it\n";
+    return false;
+  }
+  //  whether srcCluster is the end of a FAT chain
   const bool isChainEnd{FileAllocationTable32::IsEnd(srcFatData)};
+  //  previous cluster in FAT chain, or 0 if none
   const auto prevCluster{
     isChainStart ? 0 : std::get<std::uint32_t>(srcRfatData)};
+  //  sanity check that non-start cluster has a valid previous cluster
+  if (!isChainStart && !FileAllocationTable32::IsCluster(prevCluster))
+  {
+    std::cout << "ERROR: Source cluster " << std::dec << srcCluster << " is not the start of its FAT chain, but previous cluster in chain has illegal value: 0x" << std::hex << prevCluster << " (" << std::dec << prevCluster << ")\n";
+    return false;
+  }
+  //  sanity check that FAT[prevCluster]=srcCluster if appropriate
+  if (!isChainStart && srcCluster != fat0.entries.at(prevCluster))
+  {
+    std::cout << "ERROR: Source cluster " << std::dec << srcCluster << " is not the start of its FAT chain, but RFAT-reported previous cluster in chain " << prevCluster << " does not point at it\n";
+    return false;
+  }
+  //  next cluster in FAT chain, or 0 if none
   const auto nextCluster{isChainEnd ? 0 : srcFatData};
+  if (!isChainEnd)
+  {
+    // sanity check that non-end cluster has a valid next cluster
+    if (!FileAllocationTable32::IsCluster(nextCluster))
+    {
+      std::cout << "ERROR: Source cluster " << std::dec << srcCluster << " is not the end of its FAT chain, but next cluster in chain has illegal FAT value: 0x" << std::hex << nextCluster << " (" << std::dec << nextCluster << ")\n";
+      return false;
+    }
+    // sanity check that RFAT[nextCluster]=srcCluster if appropriate
+    const auto& ncRfatData{rfat.entries.at(nextCluster)};
+    if (!Rfat::IsCluster(ncRfatData) || srcCluster != std::get<std::uint32_t>(ncRfatData))
+    {
+      std::cout << "ERROR: Source cluster " << std::dec << srcCluster << " is not the end of its FAT chain, but next cluster in chain has unexpected RFAT data: " << Rfat::ToString(ncRfatData) << '\n';
+      return false;
+    }
+  }
   // std::cout << "\t\tsrcFatData=0x" << std::hex << srcFatData << ", srcRfatData=" << Rfat::ToString(srcRfatData) << ", isChainStart=" << std::dec << isChainStart << ", isChainEnd=" << isChainEnd << ", prevCluster=" << prevCluster << ", nextCluster=" << nextCluster << '\n';
 
+  // if first cluster of a file/directory, update related directory data
+  if (isChainStart)
+  {
+    // std::cout << "\t\tUpdating directory data for moved file " << srcOwnerDir->entries.at(srcEntryIndex).first.GetFilename() << '\n';
+    if (!updateDirEntry(
+      srcOwnerDir, stream, diskInfo, fat0, srcEntryIndex, destCluster, srcDir))
+    {
+      std::cout << "WARNING: Failed to update directory data for moved file " << srcEntry.GetFilename() << '\n';
+      return false;
+    }
+  }
+
   // copy data contents of srcCluster to destCluster on disk
+  // this is done after copy in the very likely case that it modifies the
+  //  contents of srcCluster itself
   // std::cout << "\t\tCopying contents of source cluster " << std::dec << srcCluster << " to destination cluster " << destCluster << '\n';
   if (!diskInfo.CopyCluster(stream, srcCluster, destCluster))
   {
     return false;
-  }
-
-  // update directory data
-  if (isChainStart)
-  {
-    // std::cout << "\t\tUpdating directory data for moved file " << srcOwnerDir->entries.at(srcEntryIndex).first.GetFilename() << '\n';
-    if (!updateDirEntry(srcOwnerDir, stream, diskInfo, fat0, srcEntryIndex, destCluster, srcDir))
-    {
-      std::cout << "WARNING: Failed to update directory data for moved file " << srcOwnerDir->entries.at(srcEntryIndex).first.GetFilename() << '\n';
-      return false;
-    }
   }
 
   // update FATs
@@ -1555,7 +1681,7 @@ bool moveCluster(
       return false;
     }
     // if previous FAT chain entry exists, point at new cluster
-    if (FileAllocationTable32::IsCluster(prevCluster))
+    if (!isChainStart)
     {
       // std::cout << "\t\tWriting previous FAT[" << std::dec << prevCluster << "]=0x" << std::hex << destCluster << " (" << std::dec << destCluster << ")\n";
       if (!fatI.Write(stream, prevCluster, destCluster))
@@ -1574,7 +1700,7 @@ bool moveCluster(
   //  mark srcCluster RFAT entry as free
   rfat.entries.at(srcCluster) = FileAllocationTable32::FREE;
   //  if next RFAT chain entry exists, point at new cluster
-  if (Rfat::IsCluster(nextCluster))
+  if (!isChainEnd)
   {
     rfat.entries.at(nextCluster) = destCluster;
   }
@@ -1583,8 +1709,7 @@ bool moveCluster(
   return true;
 }
 
-using DirList =
-  std::vector<std::pair<std::shared_ptr<Directory>, std::uint32_t>>;
+using DirList = std::vector<std::shared_ptr<Directory>>;
 bool optimize(
   ByteStream& stream,
   const DiskInfo& diskInfo,
@@ -1594,46 +1719,80 @@ bool optimize(
   Rfat& rfat
 )
 {
+  // std::cout << "SANITY CHECK 2:";
+  // for (const auto& dir : dirList)
+  // {
+  //   std::cout << " " << std::dec << dir->GetStartCluster();
+  // }
+  // std::cout << '\n';
+
   SignalHandler sh{};
+  auto& fat0{fat.at(0)};
   // find the first free cluster after the optimal directory area
-  // ...first, find the first cluster after the optimal directory area, by
-  //  counting good clusters for optimized directory use
+  // - first, find the first cluster after the optimal directory area, by
+  //    counting good clusters for optimized directory use
   std::uint32_t freeCluster{diskInfo.rootDirStartCluster};
   for (std::uint32_t i{0}; i < dirClusters; ++i)
   {
-    freeCluster = fat.at(0).GetNextGoodCluster(freeCluster);
+    freeCluster = fat0.GetNextGoodCluster(freeCluster);
     if (!freeCluster)
     {
       std::cout << "ERROR: Failed to find sufficient good clusters for holding all directories\n";
       return false;
     }
   }
-  // ...now that freeCluster holds the first cluster index after the directory
-  //  area, find the first free cluster from there
-  freeCluster = fat.at(0).GetFirstFreeCluster(freeCluster);
+  // - now that freeCluster holds the first cluster index after the directory
+  //    area, find the first free cluster from there
+  freeCluster = fat0.GetFirstFreeCluster(freeCluster);
   if (!freeCluster)
   {
     std::cout << "ERROR: Failed to find a free cluster\n";
     return false;
   }
-  std::cout << "First free cluster index after optimal directory area: " << freeCluster << " (value=0x" << std::hex << fat.at(0).entries.at(freeCluster) << ")\n";
+  std::cout << "First free cluster index after optimal directory area: " << freeCluster << " (value=0x" << std::hex << fat0.entries.at(freeCluster) << ")\n";
   // now process the list for optimization
   // root directory is assumed to start at its ideal cluster, since we probably
   //  can't/shouldn't try to move its start cluster
   // we do need to check its intermediate clusters though
   std::uint32_t idealCluster{diskInfo.rootDirStartCluster};
-  for (const auto& [dirPtr, startCluster] : dirList)
+  for (const auto& dirPtr : dirList)
   {
     if (SignalHandler::gotSignal())
     {
       std::cout << "ERROR: Caught signal\n";
       return false;
     }
+    if (!dirPtr)
+    {
+      std::cout << "ERROR: Optimization list entry is null\n";
+      return false;
+    }
+
+    const bool isRoot{dirList.front() == dirPtr};
+    // const std::string& dirName
+    // {
+    //   isRoot ? 
+    //     "<ROOT_DIR>" : 
+    //     dirPtr->parent->entryData.at(
+    //       dirPtr->parent->Find(dirPtr->GetStartCluster())).GetFilename()
+    // };
+    // std::cout << "Optimizing directory '" << dirName << "' with start cluster " << std::dec << dirPtr->GetStartCluster() << '\n';
+
+    // get directory's current start cluster, assuming
+    //  diskInfo.rootDirStartCluster if it's the first entry, since it doesn't
+    //  have a "." entry
+    const auto startCluster{isRoot ?
+      diskInfo.rootDirStartCluster : dirPtr->GetStartCluster()};
+    if (!startCluster)
+    {
+      std::cout << "ERROR: Failed to get directory start cluster\n";
+      return false;
+    }
 
     // check whether any clusters in current dir's chain need to be moved
-    const auto& curChain{fat.at(0).GetClusterChain(startCluster)};
+    const auto& curChain{fat0.GetClusterChain(startCluster)};
     const auto& idealChain{
-      fat.at(0).GetIdealClusterChain(idealCluster, curChain.size())};
+      fat0.GetIdealClusterChain(idealCluster, curChain.size())};
     if (curChain.size() != idealChain.size())
     {
       std::cout << "ERROR: Current cluster chain length=" << std::dec << curChain.size() << " does not match ideal cluster chain length=" << idealChain.size() << "; aborting\n";
@@ -1653,11 +1812,11 @@ bool optimize(
         continue;
       }
       std::cout << "Cluster " << std::dec << srcCluster << " should be moved to " << destCluster << '\n';
-      if (FileAllocationTable32::IsFree(fat.at(0).entries.at(destCluster)))
+      if (FileAllocationTable32::IsFree(fat0.entries.at(destCluster)))
       {
         std::cout << "\tDestination cluster " << std::dec << destCluster << " is already free\n";
       }
-      else
+      else if (freeCluster)
       {
         std::cout << "\tMoving data from destination cluster " << std::dec << destCluster << " to free cluster " << freeCluster << '\n';
         if (!moveCluster(
@@ -1668,12 +1827,12 @@ bool optimize(
         }
 
         // advance freeCluster
-        freeCluster = fat.at(0).GetFirstFreeCluster(freeCluster);
-        if (!freeCluster)
-        {
-          std::cout << "ERROR: Failed to find free cluster\n";
-          return false;
-        }
+        freeCluster = fat0.GetFirstFreeCluster(freeCluster);
+      }
+      else
+      {
+        std::cout << "ERROR: No free cluster\n";
+        return false;
       }
 
       // move dir cluster into ideal cluster
@@ -1686,7 +1845,7 @@ bool optimize(
     }
     // set next entry's ideal start cluster to the first good cluster following
     //  the end of the current entry's ideal chain
-    idealCluster = fat.at(0).GetNextGoodCluster(idealChain.back());
+    idealCluster = fat0.GetNextGoodCluster(idealChain.back());
     if (!idealCluster)
     {
       std::cout << "ERROR: Failed to find next ideal cluster\n";
@@ -1714,24 +1873,30 @@ int main(int argc, char* argv[])
   }
   DiskInfo diskInfo(stream);
   diskInfo.Print();
-  const uint64_t fatAreaStartByte
+  const std::uint64_t fatAreaStartByte
   {
-    static_cast<uint64_t>(diskInfo.reservedSectors) * diskInfo.bytesPerSector
+    static_cast<std::uint64_t>(diskInfo.reservedSectors) * diskInfo.bytesPerSector
   };
-  const uint64_t fatSizeBytes
+  const std::uint64_t fatSizeBytes
   {
-    static_cast<uint64_t>(diskInfo.sectorsPerFat) * diskInfo.bytesPerSector
+    static_cast<std::uint64_t>(diskInfo.sectorsPerFat) * diskInfo.bytesPerSector
   };
   std::vector<FileAllocationTable32> fat{};
   for (std::size_t i{0}; i < toNum(diskInfo.fatCount); ++i)
   {
-    const uint64_t fatStartByte{fatAreaStartByte + (fatSizeBytes * i)};
+    const std::uint64_t fatStartByte{fatAreaStartByte + (fatSizeBytes * i)};
     fat.emplace_back(stream, fatStartByte, fatSizeBytes);
     const auto& fatI{fat.at(i)};
     std::cout
       << "FAT table #" << std::dec << i << ", starting at byte index " << std::dec << fatStartByte << ":\n";
     fatI.Print("\t");
   }
+  if (fat.empty())
+  {
+    std::cout << "ERROR: No FAT table(s) found\n";
+    return -3;
+  }
+  auto& fat0{fat.at(0)};
   // process the directory tree, starting with the root directory
   // std::cout << "Root directory spans " << std::dec << fat.at(0).GetClusterChain(diskInfo.rootDirStartCluster).size() << " cluster(s):";
   // for (const auto cluster : fat.at(0).GetClusterChain(diskInfo.rootDirStartCluster))
@@ -1741,42 +1906,68 @@ int main(int argc, char* argv[])
   // std::cout << '\n';
   auto rootDirectory{std::make_shared<Directory>(nullptr)};
   rootDirectory->Get(
-    stream, diskInfo, fat.at(0), diskInfo.rootDirStartCluster, true);
+    stream, diskInfo, fat0, diskInfo.rootDirStartCluster, true);
   // std::cout << "Root directory entries (" << rootDirectory->entries.size() << "):\n";
   // rootDirectory->Print(fat.at(0));
   // build reverse-FAT table
-  Rfat rfat{fat.at(0), rootDirectory, diskInfo.rootDirStartCluster};
-  // now build a breadth-first list of all directories and their start clusters
-  DirList dirList{{rootDirectory, diskInfo.rootDirStartCluster}};
+  Rfat rfat{fat0, rootDirectory, diskInfo.rootDirStartCluster};
+  // now build a breadth-first list of all directories
+  DirList dirList{rootDirectory};
   std::cout << "Building directory list...\n";
   // ...and also count total clusters used by directories
   auto dirClusters{static_cast<std::uint32_t>(
-    fat.at(0).GetClusterChain(diskInfo.rootDirStartCluster).size())};
+    fat0.GetClusterChain(diskInfo.rootDirStartCluster).size())};
   std::cout << "\tAdded root directory with start cluster " << std::dec << diskInfo.rootDirStartCluster << " and length of " << dirClusters << " cluster(s)\n";
-  // NOTE: Neither range loop nor iteration works here, because we grow the list
-  //  as we traverse it, which they don't support
-  for (std::size_t i{0}; i < dirList.size(); ++i)
+  // NOTE: Neither range loop nor iteration works here, because they don't
+  //  support traversing a container that grows on the fly
+  for (std::size_t dirListIndex{0}; dirListIndex < dirList.size(); ++dirListIndex)
   {
-    const auto dirPtr{dirList.at(i).first};
+    // std::cout << "#" << std::dec << dirListIndex+1 << '/' << dirList.size() << '\n';
+    // grab by copy, because a reference will likely get invalidated as dirList
+    //  is modified
+    const auto dirPtr{dirList.at(dirListIndex)};
+    if (!dirPtr)
+    {
+      std::cout << "ERROR: dirList[" << std::dec << dirListIndex << "] is null\n";
+      return -4;
+    }
     // const auto dirStartCluster{dlIter->second};
     // put all of this directory's subdirs on the queue
     // ...and also count and add its cluster length
-    for (const auto& [subdirData, subdirPtr] : dirPtr->entries)
+    const auto& entryData{dirPtr->entryData};
+    const auto& entryDir{dirPtr->entryDir};
+    for (std::size_t entryIndex{0}; entryIndex < entryData.size(); ++entryIndex)
     {
-      // if (subdirData.IsDotEntry())
-      // {
-      //   subdirData.Print(fat.at(0));
-      // }
-      if (!subdirPtr) continue;
-      const auto subdirStartCluster{subdirData.GetStartCluster()};
-      const auto subdirNumClusters{static_cast<std::uint32_t>(
-        fat.at(0).GetClusterChain(subdirStartCluster).size())};
-      std::cout << "\tAdding directory " << subdirData.GetFilename() << " with start cluster " << std::dec << subdirStartCluster << " and length of " << subdirNumClusters << " cluster(s)\n";
-      dirList.emplace_back(subdirPtr, subdirStartCluster);
-      dirClusters += subdirNumClusters;
+      const auto& subdirData{entryData.at(entryIndex)};
+      // std::cout << "\t#" << std::dec << entryIndex+1 << '/' << entryData.size() << ": ";
+      // subdirData.Print(fat0);
+      if (subdirData.IsEnd())
+      {
+        // std::cout << "\t\tBreaking on end record\n";
+        break;
+      }
+      // only process Directory entries
+      if (const auto& subdirPtr{entryDir.at(entryIndex)}; subdirPtr)
+      {
+        const auto subdirStartCluster{subdirData.GetStartCluster()};
+        const auto subdirNumClusters{static_cast<std::uint32_t>(
+          fat0.GetClusterChain(subdirStartCluster).size())};
+        std::cout << "\tAdding directory " << subdirData.GetFilename() << " with start cluster " << std::dec << subdirStartCluster << " and length of " << subdirNumClusters << " cluster(s)\n";
+        dirList.emplace_back(subdirPtr);
+        dirClusters += subdirNumClusters;
+      }
+      // std::cout << "\tEND Entry\n";
     }
+    // std::cout << "END\n";
   }
   std::cout << "Counted " << std::dec << dirList.size() << " directories total, spanning " << dirClusters << " total cluster(s)\n";
+
+  // std::cout << "SANITY CHECK 1:";
+  // for (const auto& dir : dirList)
+  // {
+  //   std::cout << " " << std::dec << dir->GetStartCluster();
+  // }
+  // std::cout << '\n';
 
   std::cout << "\nType OPTIMIZE and press Enter if you want to proceed with optimization based on the above info: ";
   std::cout.flush();
