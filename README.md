@@ -27,7 +27,7 @@ Moving FAT32 directories is only slightly more difficult than moving regular fil
 I have a spinning-rust USB HDD with lots of files on it, some of which are very large, and many small. My attempts to do fancy arrangements of these files to avoid fragmentation were thwarted by the realization that directory data was getting in the way.
 
 ## No!
-This project _only_ arranges directory data clusters. It does _not_ change the order of files/directories in the directory tree (there are other projects that do this). It does _not_ optimize/degragment the entire disk - in fact, it will likely create fragmentation of non-directories while moving them out of the "directory area", so you should consider running a defragmenter afterwards.
+This project _only_ arranges directory data clusters. It does _not_ change the order of files/directories in the directory tree (there are other projects that do this). It does _not_ optimize/defragment the entire disk - in fact, it will likely create fragmentation of non-directories while moving them out of the "directory area", so you should consider running a defragmenter afterwards.
 
 This currently only runs in Linux, because it's easy to modify physical disks via block device pseudo-files. Note that the partition must be unmounted.
 
