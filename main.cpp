@@ -265,9 +265,9 @@ struct DiskInfo
     bytesPerCluster = bytesPerSector * toNum(sectorsPerCluster);
     totalClusters = totalSectors / toNum(sectorsPerCluster);
     totalBytes = static_cast<std::size_t>(totalSectors) * bytesPerSector;
-    cluster2StartByte = 
+    cluster2StartByte =
       (
-        static_cast<std::size_t>(reservedSectors) + 
+        static_cast<std::size_t>(reservedSectors) +
         (static_cast<std::size_t>(fatCount) * sectorsPerFat)
       ) * bytesPerSector;
     dirEntriesPerCluster = bytesPerCluster / 32;
@@ -653,6 +653,61 @@ struct FileAllocationTable32
     // update memory cache last, to ensure if reflects the disk state
     entries.at(index) = data;
     return true;
+  }
+
+  // compare two FATs for data equivalency
+  bool Compare(const FileAllocationTable32& rhs) const
+  {
+    // NOTE: don't care about startByte, just compare entries
+
+    if (rhs.entries.size() != entries.size())
+    {
+      std::cout << "\tFAT tables have different sizes\n";
+      return false;
+    }
+
+    std::size_t diffs{0};
+    for (std::size_t i{0}; i < entries.size(); ++i)
+    {
+      if (rhs.entries.at(i) == entries.at(i)) continue;
+      if (++diffs > 100) continue;
+      std::cout
+        << " @0x" << std::hex << std::setw(8) << std::setfill('0') << i
+        << "  0x" << std::hex << std::setw(8) << std::setfill('0') << entries.at(i)
+        << "  0x" << std::hex << std::setw(8) << std::setfill('0') << rhs.entries.at(i)
+        << '\n';
+      if (100 == diffs)
+      {
+        std::cout << "\t(maximum of 100 diffs found; suppressing any additional findings)\n";
+      }
+    }
+
+    std::cout << "\t" << std::dec << diffs << " difference(s) found\n";
+    return !diffs;
+  }
+
+  // get a vector of all FAT tables from a stream with the given disk info
+  static std::vector<FileAllocationTable32> GetAll(const DiskInfo& diskInfo, ByteStream& stream)
+  {
+    const std::uint64_t fatAreaStartByte
+    {
+      static_cast<std::uint64_t>(diskInfo.reservedSectors) * diskInfo.bytesPerSector
+    };
+    const std::uint64_t fatSizeBytes
+    {
+      static_cast<std::uint64_t>(diskInfo.sectorsPerFat) * diskInfo.bytesPerSector
+    };
+    std::vector<FileAllocationTable32> fat{};
+    for (std::size_t i{0}; i < toNum(diskInfo.fatCount); ++i)
+    {
+      const std::uint64_t fatStartByte{fatAreaStartByte + (fatSizeBytes * i)};
+      fat.emplace_back(stream, fatStartByte, fatSizeBytes);
+      const auto& fatI{fat.at(i)};
+      std::cout
+        << "FAT table #" << std::dec << i << ", starting at byte index " << std::dec << fatStartByte << ":\n";
+      fatI.Print("\t");
+    }
+    return fat;
   }
 };
 
@@ -1222,6 +1277,18 @@ struct Directory : public std::enable_shared_from_this<Directory>
       data.Print(fat);
     }
   }
+
+  // get entire directory tree, as a pointer to the root directory
+  static std::shared_ptr<Directory> GetAll(
+    ByteStream& stream,
+    const DiskInfo& diskInfo,
+    const FileAllocationTable32& fat)
+  {
+    auto rootDirectory{std::make_shared<Directory>(nullptr)};
+    rootDirectory->Get(
+      stream, diskInfo, fat, diskInfo.rootDirStartCluster, true);
+    return rootDirectory;
+  }
 };
 
 // "reverse FAT" object that maps each cluster index to the previous cluster in
@@ -1566,9 +1633,9 @@ bool moveCluster(
     std::cout << "ERROR: Source cluster " << std::dec << srcCluster << " is in use by something other than a file or directory\n";
     std::cout << "       Listing: ";
     srcEntry.Print(fat0);
-    std::cout << "       filename='" << srcEntry.GetFilename() 
-              << "', IsDevice=" << std::dec << srcEntry.IsDevice() 
-              << ", IsDirectory=" << srcEntry.IsDirectory() 
+    std::cout << "       filename='" << srcEntry.GetFilename()
+              << "', IsDevice=" << std::dec << srcEntry.IsDevice()
+              << ", IsDirectory=" << srcEntry.IsDirectory()
               << ", IsDotEntry=" << srcEntry.IsDotEntry()
               << ", IsEnd=" << srcEntry.IsEnd()
               << ", IsEndLFN=" << srcEntry.IsEndLFN()
@@ -1710,6 +1777,123 @@ bool moveCluster(
 }
 
 using DirList = std::vector<std::shared_ptr<Directory>>;
+
+// build a breadth-first list of all directories in the given tree
+std::pair<DirList, std::uint32_t> getDirList(
+  std::shared_ptr<Directory> rootDir,
+  const DiskInfo& diskInfo,
+  const FileAllocationTable32& fat)
+{
+  DirList dirList{rootDir};
+  std::cout << "Building directory list...\n";
+  // ...and also count total clusters used by directories
+  auto dirClusters{static_cast<std::uint32_t>(
+    fat.GetClusterChain(diskInfo.rootDirStartCluster).size())};
+  std::cout << "\tAdded root directory with start cluster " << std::dec << diskInfo.rootDirStartCluster << " and length of " << dirClusters << " cluster(s)\n";
+  // NOTE: Neither range loop nor iteration works here, because they don't
+  //  support traversing a container that grows on the fly
+  for (std::size_t dirListIndex{0}; dirListIndex < dirList.size(); ++dirListIndex)
+  {
+    // std::cout << "#" << std::dec << dirListIndex+1 << '/' << dirList.size() << '\n';
+    // grab by copy, because a reference will likely get invalidated as dirList
+    //  is modified
+    const auto dirPtr{dirList.at(dirListIndex)};
+    if (!dirPtr)
+    {
+      std::cout << "ERROR: dirList[" << std::dec << dirListIndex << "] is null\n";
+      return {};
+    }
+    // const auto dirStartCluster{dlIter->second};
+    // put all of this directory's subdirs on the queue
+    // ...and also count and add its cluster length
+    const auto& entryData{dirPtr->entryData};
+    const auto& entryDir{dirPtr->entryDir};
+    for (std::size_t entryIndex{0}; entryIndex < entryData.size(); ++entryIndex)
+    {
+      const auto& subdirData{entryData.at(entryIndex)};
+      // std::cout << "\t#" << std::dec << entryIndex+1 << '/' << entryData.size() << ": ";
+      // subdirData.Print(fat0);
+      if (subdirData.IsEnd())
+      {
+        // std::cout << "\t\tBreaking on end record\n";
+        break;
+      }
+      // only process Directory entries
+      if (const auto& subdirPtr{entryDir.at(entryIndex)}; subdirPtr)
+      {
+        const auto subdirStartCluster{subdirData.GetStartCluster()};
+        const auto subdirNumClusters{static_cast<std::uint32_t>(
+          fat.GetClusterChain(subdirStartCluster).size())};
+        std::cout << "\tAdding directory " << subdirData.GetFilename() << " with start cluster " << std::dec << subdirStartCluster << " and length of " << subdirNumClusters << " cluster(s)\n";
+        dirList.emplace_back(subdirPtr);
+        dirClusters += subdirNumClusters;
+      }
+      // std::cout << "\tEND Entry\n";
+    }
+    // std::cout << "END\n";
+  }
+  std::cout << "Counted " << std::dec << dirList.size() << " directories total, spanning " << dirClusters << " total cluster(s)\n";
+  return {std::move(dirList), dirClusters};
+}
+
+// compare two DirList's for equality of entry count and entry start clusters
+bool compare(const DirList& lhs, const DirList& rhs)
+{
+  if (lhs.size() != rhs.size())
+  {
+    std::cout << "compare(DirList,DirList): lists have different sizes\n";
+    return false;
+  }
+
+  for (std::size_t dlIndex{0}; dlIndex < lhs.size(); ++dlIndex)
+  {
+    const auto& dirL{*(lhs.at(dlIndex))};
+    const auto& dirR{*(rhs.at(dlIndex))};
+    if (dirL.entryData.size() != dirR.entryData.size())
+    {
+      std::cout << "compare(DirList,DirList): directories at index " << std::dec << dlIndex << " have different entry list sizes\n";
+      return false;
+    }
+    for (std::size_t entryIndex{0}; entryIndex < dirL.entryData.size(); ++entryIndex)
+    {
+      const auto& entryL{dirL.entryData.at(entryIndex)};
+      const auto& entryR{dirR.entryData.at(entryIndex)};
+      if (entryL.IsDevice() != entryR.IsDevice()
+        || entryL.IsDirectory() != entryR.IsDirectory()
+        || entryL.IsDotEntry() != entryR.IsDotEntry()
+        || entryL.IsEnd() != entryR.IsEnd()
+        || entryL.IsEndLFN() != entryR.IsEndLFN()
+        || entryL.IsErased() != entryR.IsErased()
+        || entryL.IsErasedLFN() != entryR.IsErasedLFN()
+        || entryL.IsFile() != entryR.IsFile()
+        || entryL.IsLongFilenameData() != entryR.IsLongFilenameData()
+        || entryL.IsSubdirectory() != entryR.IsSubdirectory()
+        || entryL.IsVolumeLabel() != entryR.IsVolumeLabel()
+      )
+      {
+        std::cout << "compare(DirList,DirList): Entries at index " << std::dec << entryIndex << " of directories at index " << dlIndex << " have different characteristics\n";
+        return false;
+      }
+      // break at end, because data after doesn't matter
+      if (entryL.IsEnd()) break;
+      // ignore LFN / erased entries for now
+      if (entryL.IsLongFilenameData() && entryL.IsErased()) continue;
+      if (entryL.GetFilename() != entryR.GetFilename())
+      {
+        std::cout << "compare(DirList,DirList): Entries at index " << std::dec << entryIndex << " of directories at index " << dlIndex << " have different filenames\n";
+        return false;
+      }
+      if (entryL.GetStartCluster() != entryR.GetStartCluster())
+      {
+        std::cout << "compare(DirList,DirList): Entries at index " << std::dec << entryIndex << " of directories at index " << dlIndex << " have different start clusters\n";
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
 bool optimize(
   ByteStream& stream,
   const DiskInfo& diskInfo,
@@ -1771,8 +1955,8 @@ bool optimize(
     const bool isRoot{dirList.front() == dirPtr};
     // const std::string& dirName
     // {
-    //   isRoot ? 
-    //     "<ROOT_DIR>" : 
+    //   isRoot ?
+    //     "<ROOT_DIR>" :
     //     dirPtr->parent->entryData.at(
     //       dirPtr->parent->Find(dirPtr->GetStartCluster())).GetFilename()
     // };
@@ -1873,30 +2057,22 @@ int main(int argc, char* argv[])
   }
   DiskInfo diskInfo(stream);
   diskInfo.Print();
-  const std::uint64_t fatAreaStartByte
-  {
-    static_cast<std::uint64_t>(diskInfo.reservedSectors) * diskInfo.bytesPerSector
-  };
-  const std::uint64_t fatSizeBytes
-  {
-    static_cast<std::uint64_t>(diskInfo.sectorsPerFat) * diskInfo.bytesPerSector
-  };
-  std::vector<FileAllocationTable32> fat{};
-  for (std::size_t i{0}; i < toNum(diskInfo.fatCount); ++i)
-  {
-    const std::uint64_t fatStartByte{fatAreaStartByte + (fatSizeBytes * i)};
-    fat.emplace_back(stream, fatStartByte, fatSizeBytes);
-    const auto& fatI{fat.at(i)};
-    std::cout
-      << "FAT table #" << std::dec << i << ", starting at byte index " << std::dec << fatStartByte << ":\n";
-    fatI.Print("\t");
-  }
+  auto fat{FileAllocationTable32::GetAll(diskInfo, stream)};
   if (fat.empty())
   {
     std::cout << "ERROR: No FAT table(s) found\n";
     return -3;
   }
-  auto& fat0{fat.at(0)};
+  const auto& fat0{fat.at(0)};
+  std::cout << "Cross-comparing secondary FAT tables...\n";
+  for (std::size_t i{1}; i < fat.size(); ++i)
+  {
+    const auto& fatI{fat.at(i)};
+    if (!fat0.Compare(fatI))
+    {
+      std::cout << "WARNING: FAT table mismatch; post-optimize verify will also likely fail\n";
+    }
+  }
   // process the directory tree, starting with the root directory
   // std::cout << "Root directory spans " << std::dec << fat.at(0).GetClusterChain(diskInfo.rootDirStartCluster).size() << " cluster(s):";
   // for (const auto cluster : fat.at(0).GetClusterChain(diskInfo.rootDirStartCluster))
@@ -1904,64 +2080,18 @@ int main(int argc, char* argv[])
   //   std::cout << std::dec << " " << cluster;
   // }
   // std::cout << '\n';
-  auto rootDirectory{std::make_shared<Directory>(nullptr)};
-  rootDirectory->Get(
-    stream, diskInfo, fat0, diskInfo.rootDirStartCluster, true);
+  auto rootDirectory{Directory::GetAll(stream, diskInfo, fat0)};
   // std::cout << "Root directory entries (" << rootDirectory->entries.size() << "):\n";
   // rootDirectory->Print(fat.at(0));
   // build reverse-FAT table
   Rfat rfat{fat0, rootDirectory, diskInfo.rootDirStartCluster};
   // now build a breadth-first list of all directories
-  DirList dirList{rootDirectory};
-  std::cout << "Building directory list...\n";
-  // ...and also count total clusters used by directories
-  auto dirClusters{static_cast<std::uint32_t>(
-    fat0.GetClusterChain(diskInfo.rootDirStartCluster).size())};
-  std::cout << "\tAdded root directory with start cluster " << std::dec << diskInfo.rootDirStartCluster << " and length of " << dirClusters << " cluster(s)\n";
-  // NOTE: Neither range loop nor iteration works here, because they don't
-  //  support traversing a container that grows on the fly
-  for (std::size_t dirListIndex{0}; dirListIndex < dirList.size(); ++dirListIndex)
+  auto [dirList, dirClusters]{getDirList(rootDirectory, diskInfo, fat0)};
+  if (dirList.empty())
   {
-    // std::cout << "#" << std::dec << dirListIndex+1 << '/' << dirList.size() << '\n';
-    // grab by copy, because a reference will likely get invalidated as dirList
-    //  is modified
-    const auto dirPtr{dirList.at(dirListIndex)};
-    if (!dirPtr)
-    {
-      std::cout << "ERROR: dirList[" << std::dec << dirListIndex << "] is null\n";
-      return -4;
-    }
-    // const auto dirStartCluster{dlIter->second};
-    // put all of this directory's subdirs on the queue
-    // ...and also count and add its cluster length
-    const auto& entryData{dirPtr->entryData};
-    const auto& entryDir{dirPtr->entryDir};
-    for (std::size_t entryIndex{0}; entryIndex < entryData.size(); ++entryIndex)
-    {
-      const auto& subdirData{entryData.at(entryIndex)};
-      // std::cout << "\t#" << std::dec << entryIndex+1 << '/' << entryData.size() << ": ";
-      // subdirData.Print(fat0);
-      if (subdirData.IsEnd())
-      {
-        // std::cout << "\t\tBreaking on end record\n";
-        break;
-      }
-      // only process Directory entries
-      if (const auto& subdirPtr{entryDir.at(entryIndex)}; subdirPtr)
-      {
-        const auto subdirStartCluster{subdirData.GetStartCluster()};
-        const auto subdirNumClusters{static_cast<std::uint32_t>(
-          fat0.GetClusterChain(subdirStartCluster).size())};
-        std::cout << "\tAdding directory " << subdirData.GetFilename() << " with start cluster " << std::dec << subdirStartCluster << " and length of " << subdirNumClusters << " cluster(s)\n";
-        dirList.emplace_back(subdirPtr);
-        dirClusters += subdirNumClusters;
-      }
-      // std::cout << "\tEND Entry\n";
-    }
-    // std::cout << "END\n";
+    std::cout << "Directory list is empty - either an error occurred, or there is nothing to optimize\n";
+    return 0;
   }
-  std::cout << "Counted " << std::dec << dirList.size() << " directories total, spanning " << dirClusters << " total cluster(s)\n";
-
   // std::cout << "SANITY CHECK 1:";
   // for (const auto& dir : dirList)
   // {
@@ -1979,7 +2109,40 @@ int main(int argc, char* argv[])
     return 0;
   }
 
+  std::cout << "\n********************\n";
   optimize(stream, diskInfo, dirList, dirClusters, fat, rfat);
+  std::cout << "********************\n\n";
+
+  stream.sync();
+  std::cout << "Verifying FATs...\n";
+  const auto& postFats{FileAllocationTable32::GetAll(diskInfo, stream)};
+  if (fat.size() == postFats.size())
+  {
+    for (std::size_t i{0}; i < fat.size(); ++i)
+    {
+      std::cout << " #" << std::dec << i << ":\n";
+      fat.at(i).Compare(postFats.at(i));
+    }
+  }
+  else
+  {
+    std::cout << "ERROR: Different number of FAT tables on disk versus in memory!\n";
+  }
+  std::cout << "Cross-comparing secondary FAT tables...\n";
+  for (std::size_t i{1}; i < postFats.size(); ++i)
+  {
+    if (!postFats.at(0).Compare(postFats.at(i)))
+    {
+      std::cout << "WARNING: FAT table mismatch;\n";
+    }
+  }
+  std::cout << "Verifying directory trees...\n";
+  if (compare(dirList, getDirList(
+    Directory::GetAll(stream, diskInfo, postFats.at(0)),
+    diskInfo, postFats.at(0)).first))
+  {
+    std::cout << "Trees match!\n";
+  }
 
   return 0;
 }
