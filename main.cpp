@@ -1,6 +1,7 @@
 #include <cassert>
 #include <csignal>
 #include <cstdint>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -776,13 +777,14 @@ struct DirectoryEntry
   std::uint16_t startClusterLo{};
   std::uint32_t sizeBytes{}; // NOTE: should be 0 for labels/subdirs
   //  long filename overlay data
-  //   NOTE: ignoring most of this for now, as it's messy and I don't plan to
-  //    muck with it
   ByteType      sequenceData{};
+  ByteBuffer    lfnBytes{};
 
   // populate from 32 bytes read from current stream position
   void Get(ByteStream& stream)
   {
+    // cache current stream position in case we need to rewind to get LFN data
+    const auto startByte{stream.tellg()};
     // NOTE: this will be garbage if it's an LFN entry; it's up to the user to
     //  deal with that
     shortName = readString(stream, 8);
@@ -798,8 +800,30 @@ struct DirectoryEntry
     readNum(modifyDate, stream, 2);
     readNum(startClusterLo, stream, 2);
     readNum(sizeBytes, stream, 4);
-    // if this is a long filename entry, populate sequenceData
-    sequenceData = IsLongFilenameData() ? shortName[0] : 0;
+    // if this is a long filename entry, grab relevant data
+    if (IsLongFilenameData())
+    {
+      // rewind to record start
+      stream.seekg(startByte);
+      readNum(sequenceData, stream, 1);
+      lfnBytes.resize(26);
+      // read 10 bytes
+      stream.read((char*)lfnBytes.data(), 10);
+      // skip over 3 bytes
+      stream.seekg(3, std::ios_base::cur);
+      // read + append 12 bytes
+      stream.read((char*)(lfnBytes.data() + 10), 12);
+      // skip 2 bytes
+      stream.seekg(2, std::ios_base::cur);
+      // read + append 4 bytes
+      stream.read((char*)(lfnBytes.data() + 22), 4);
+      // stream pointer is now back where it was
+    }
+    else
+    {
+      sequenceData = 0;
+      lfnBytes.clear();
+    }
   }
 
   std::string GetFilename() const
@@ -1253,6 +1277,62 @@ struct Directory : public std::enable_shared_from_this<Directory>
       if (atCluster == data.GetStartCluster()) return i;
     }
     return npos;
+  }
+
+  std::string GetFileNameAt(const std::size_t index) const
+  {
+    if (index >= entryData.size()) return {};
+    const auto& entry{entryData.at(index)};
+    if (entry.IsLongFilenameData() || entry.IsEnd()) return {};
+
+    const auto& lfn{GetLongFileNameAt(index)};
+
+    return lfn.empty() ? entry.GetFilename() : lfn;
+  }
+
+  std::string GetLongFileNameAt(const std::size_t index) const
+  {
+    if (!index) return {};
+    // find first entry with LFN data for given index
+    std::size_t lfnStart{index - 1};
+    while (true)
+    {
+      const auto& lfnEntry{entryData.at(lfnStart)};
+      // abort if we ran out of LFN data without hitting the end record
+      if (!lfnEntry.IsLongFilenameData()) return {};
+      // stop if we found the end
+      if (lfnEntry.IsEndLFN()) break;
+      // abort if this is the very first directory entry
+      if (!lfnStart) return {};
+      // else decrement
+      --lfnStart;
+    }
+    // lfnStart is now the first LFN entry, and index - 1 is the last one
+    // accumulate data into a buffer
+    ByteBuffer buf{};
+    for (std::size_t i{lfnStart}; i < index; ++i)
+    {
+      const auto& entryLfnBytes{entryData.at(i).lfnBytes};
+      buf.insert(buf.end(), entryLfnBytes.begin(), entryLfnBytes.end());
+    }
+    // buf now holds all the character data
+    // strip off any 0xffff padding words
+    while (buf.size() >= 2 && 0xff == buf.back() && 0xff == buf.at(buf.size() - 2))
+    {
+      buf.pop_back();
+      buf.pop_back();
+    }
+    // also strip off any 0x0000 terminator words
+    while (buf.size() >= 2 && 0x00 == buf.back() && 0x00 == buf.at(buf.size() - 2))
+    {
+      buf.pop_back();
+      buf.pop_back();
+    }
+    std::filesystem::path lfn(
+      (char16_t*)(buf.data()),
+      (char16_t*)(buf.data() + buf.size())
+    );
+    return lfn.string();
   }
 
   // get own start cluster as reported by "." entry, or 0 if not found
@@ -1824,7 +1904,7 @@ std::pair<DirList, std::uint32_t> getDirList(
         const auto subdirStartCluster{subdirData.GetStartCluster()};
         const auto subdirNumClusters{static_cast<std::uint32_t>(
           fat.GetClusterChain(subdirStartCluster).size())};
-        std::cout << "\tAdding directory " << subdirData.GetFilename() << " with start cluster " << std::dec << subdirStartCluster << " and length of " << subdirNumClusters << " cluster(s)\n";
+        std::cout << "\tAdding directory '" << dirPtr->GetFileNameAt(entryIndex) << "' with start cluster " << std::dec << subdirStartCluster << " and length of " << subdirNumClusters << " cluster(s)\n";
         dirList.emplace_back(subdirPtr);
         dirClusters += subdirNumClusters;
       }
